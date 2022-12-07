@@ -5,7 +5,10 @@
 #include <assert.h>
 #include <stdbool.h>
 
-typedef unsigned char uchar;
+#include <simde/x86/mmx.h>
+#include <simde/x86/sse.h>
+
+typedef uint8_t uchar;
 
 #define JUDY_MASK_PTR 0x0000fffffffffff8ull
 #define JUDY_MASK_TAG 0x0000000000000007ull
@@ -36,6 +39,7 @@ typedef struct JUDY
 enum
 {
     LEAF,
+    TINY,
     TRIE,
 };
 
@@ -52,6 +56,16 @@ typedef struct JUDY_TRIE_NODE
     JP nodes[256];
 } judy_trie_t;
 
+/**
+ * 
+ */
+typedef struct JUDY_TINY_NODE
+{
+    uchar keys[7];
+    uint8_t mask;
+    JP nodes[7];
+} judy_tiny_t;
+
 void *judy_lookup(judy_t *judy, const uchar *key)
 {
     JP node = judy->root;
@@ -64,6 +78,23 @@ void *judy_lookup(judy_t *judy, const uchar *key)
         {
         case LEAF:
             return NULL;
+        case TINY:
+        {
+            judy_tiny_t *tiny = (judy_tiny_t *)decode(node);
+
+            __m64 vec = _m_from_int64(*(uint64_t *)&tiny->keys);
+            __m64 key = _mm_set1_pi8(cc);
+            __m64 cmp = _mm_cmpeq_pi8(vec, key);
+
+            uint64_t res = _mm_movemask_pi8(cmp) & tiny->mask;
+
+            if (!res)
+                return NULL;
+
+            node = tiny->nodes[__builtin_clz(res)];
+
+            break;
+        }
         case TRIE:
         {
             judy_trie_t *trie = (judy_trie_t *)decode(node);
@@ -100,6 +131,25 @@ LOOKUP:
         {
         case LEAF:
             goto EXPAND;
+        case TINY:
+        {
+            judy_tiny_t *tiny = (judy_tiny_t *)decode(*node);
+
+            __m64 vec = _m_from_int64(*(uint64_t *)&tiny->keys);
+            __m64 key = _mm_set1_pi8(cc);
+            __m64 cmp = _mm_cmpeq_pi8(vec, key);
+
+            uint64_t res = _mm_movemask_pi8(cmp) & tiny->mask;
+
+            if (!res)
+            {
+                // key not found
+            }
+
+            node = &tiny->nodes[__builtin_clz(res)];
+
+            break;
+        }
         case TRIE:
         {
             judy_trie_t *trie = (judy_trie_t *)decode(*node);
@@ -140,34 +190,6 @@ INSERT:
     *node = encode(val, LEAF);
 }
 
-void judy_remove(judy_t *judy, const uchar *key)
-{
-    JP *node = &judy->root;
-
-    while (1)
-    {
-        uchar cc = *key;
-
-        switch (typeof(*node))
-        {
-        case LEAF:
-            return;
-        case TRIE:
-        {
-            judy_trie_t *trie = (judy_trie_t *)decode(*node);
-            node = &trie->nodes[cc];
-            break;
-        }
-        }
-
-        if (!cc)
-            break;
-
-        ++key;
-    }
-
-    *node = encode(NULL, LEAF);
-}
 
 int main()
 {
