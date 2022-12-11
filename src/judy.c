@@ -4,9 +4,6 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include <simde/x86/mmx.h>
-#include <simde/x86/sse.h>
-
 #include "nodes/leaf.h"
 #include "nodes/tiny.h"
 #include "nodes/trie.h"
