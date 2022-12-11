@@ -1,5 +1,4 @@
-
-
+#include "judy.h"
 #include "internal.h"
 
 #include <string.h>
@@ -11,11 +10,6 @@
 #include "nodes/leaf.h"
 #include "nodes/tiny.h"
 #include "nodes/trie.h"
-
-typedef struct JUDY
-{
-    JP root;
-} judy_t;
 
 enum
 {
@@ -102,7 +96,7 @@ void judy_insert(judy_t *judy, const uchar *key, void *val)
         switch (typeof(*nodeptr))
         {
         case LEAF:
-            res = _leaf_insert(nodeptr, cc);
+            res = _leaf_insert(&nodeptr, cc);
             break;
         case TINY:
             res = _tiny_insert(&nodeptr, cc);
@@ -146,24 +140,3 @@ INSERT:
 
     *nodeptr = encode(val, LEAF);
 }
-
-// int main()
-// {
-//     judy_t judy = {};
-
-//     judy_insert(&judy, (uchar *)"abc", &judy);
-
-//     const void *res;
-
-//     res = judy_lookup(&judy, (uchar *)"abc");
-
-//     assert(res == &judy);
-
-//     judy_remove(&judy, (uchar *)"abc");
-
-//     res = judy_lookup(&judy, (uchar *)"abc");
-
-//     assert(res == NULL);
-
-//     return 0;
-// }

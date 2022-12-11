@@ -19,7 +19,7 @@ static bool _trie_insert(JP **nodeptr, uchar cc)
 {
     struct TRIE *trie = (struct TRIE *)decode(**nodeptr);
 
-    *nodeptr = &true->nodes[cc];
+    *nodeptr = &trie->nodes[cc];
 
     return true;
 }
