@@ -1,35 +1,16 @@
 
+
+#include "internal.h"
+
 #include <string.h>
 #include <stdlib.h>
-#include <stdint.h>
-#include <assert.h>
-#include <stdbool.h>
 
 #include <simde/x86/mmx.h>
 #include <simde/x86/sse.h>
 
-typedef uint8_t uchar;
-
-#define JUDY_MASK_PTR 0x0000fffffffffff8ull
-#define JUDY_MASK_TAG 0x0000000000000007ull
-
-#define typeof(ptr) ((ptr)&JUDY_MASK_TAG)
-#define decode(ptr) ((ptr)&JUDY_MASK_PTR)
-
-/**
- *
- */
-typedef uintptr_t JP;
-
-static inline __attribute__((always_inline)) JP encode(void *node, uintptr_t tag)
-{
-    uintptr_t ptr = (uintptr_t)node;
-
-    assert((ptr & JUDY_MASK_TAG) == 0);
-    assert((tag & JUDY_MASK_PTR) == 0);
-
-    return (JP)(ptr | tag);
-}
+#include "nodes/leaf.h"
+#include "nodes/tiny.h"
+#include "nodes/trie.h"
 
 typedef struct JUDY
 {
@@ -57,7 +38,7 @@ typedef struct JUDY_TRIE_NODE
 } judy_trie_t;
 
 /**
- * 
+ *
  */
 typedef struct JUDY_TINY_NODE
 {
@@ -74,40 +55,32 @@ void *judy_lookup(judy_t *judy, const uchar *key)
     {
         uchar cc = *key;
 
+        bool res;
         switch (typeof(node))
         {
         case LEAF:
-            return NULL;
+            res = _leaf_lookup(&node, cc);
+            break;
         case TINY:
-        {
-            judy_tiny_t *tiny = (judy_tiny_t *)decode(node);
-
-            __m64 vec = _m_from_int64(*(uint64_t *)&tiny->keys);
-            __m64 key = _mm_set1_pi8(cc);
-            __m64 cmp = _mm_cmpeq_pi8(vec, key);
-
-            uint64_t res = _mm_movemask_pi8(cmp) & tiny->mask;
-
-            if (!res)
-                return NULL;
-
-            node = tiny->nodes[__builtin_clz(res)];
-
+            res = _tiny_lookup(&node, cc);
             break;
-        }
         case TRIE:
-        {
-            judy_trie_t *trie = (judy_trie_t *)decode(node);
-            node = trie->nodes[cc];
+            res = _trie_lookup(&node, cc);
             break;
+        default:
+            assert(0);
         }
-        }
+
+        if (res == false)
+            return NULL;
+
 
         // If cc == '\0' we can assume that we deal with a leave node
         // because no string key continues after '\0'.
         // The associated value can be retrieved instead of a subexpanse
         if (!cc)
             return (void *)decode(node);
+
 
         ++key;
     }
@@ -117,46 +90,30 @@ void *judy_lookup(judy_t *judy, const uchar *key)
 
 void judy_insert(judy_t *judy, const uchar *key, void *val)
 {
-    JP *node = &judy->root;
+    JP *nodeptr = &judy->root;
 
 // traverse the judy array by decoding char by char until
 // a node is reached which no longer contains the remaining key
-LOOKUP:
-
     while (1)
     {
         uchar cc = *key;
 
-        switch (typeof(*node))
+        bool res;
+        switch (typeof(*nodeptr))
         {
         case LEAF:
-            goto EXPAND;
+            res = _leaf_insert(nodeptr, cc);
+            break;
         case TINY:
-        {
-            judy_tiny_t *tiny = (judy_tiny_t *)decode(*node);
-
-            __m64 vec = _m_from_int64(*(uint64_t *)&tiny->keys);
-            __m64 key = _mm_set1_pi8(cc);
-            __m64 cmp = _mm_cmpeq_pi8(vec, key);
-
-            uint64_t res = _mm_movemask_pi8(cmp) & tiny->mask;
-
-            if (!res)
-            {
-                // key not found
-            }
-
-            node = &tiny->nodes[__builtin_clz(res)];
-
+            res = _tiny_insert(&nodeptr, cc);
             break;
-        }
         case TRIE:
-        {
-            judy_trie_t *trie = (judy_trie_t *)decode(*node);
-            node = &trie->nodes[cc];
+            res = _trie_insert(&nodeptr, cc);
             break;
         }
-        }
+
+        if (res == false)
+            break;
 
         if (!cc)
             break;
@@ -174,8 +131,8 @@ EXPAND:
         uchar cc = *key;
 
         judy_trie_t *trie = (judy_trie_t *)calloc(1, sizeof(judy_trie_t));
-        *node = encode(trie, TRIE);
-        node = &trie->nodes[cc];
+        *nodeptr = encode(trie, TRIE);
+        nodeptr = &trie->nodes[cc];
 
         if (!cc)
             break;
@@ -187,27 +144,26 @@ EXPAND:
 // all that is left to be done is write the value to a leaf node.
 INSERT:
 
-    *node = encode(val, LEAF);
+    *nodeptr = encode(val, LEAF);
 }
 
+// int main()
+// {
+//     judy_t judy = {};
 
-int main()
-{
-    judy_t judy = {};
+//     judy_insert(&judy, (uchar *)"abc", &judy);
 
-    judy_insert(&judy, (uchar *)"abc", &judy);
+//     const void *res;
 
-    const void *res;
-    
-    res = judy_lookup(&judy, (uchar *)"abc");
+//     res = judy_lookup(&judy, (uchar *)"abc");
 
-    assert(res == &judy);
+//     assert(res == &judy);
 
-    judy_remove(&judy, (uchar *)"abc");
+//     judy_remove(&judy, (uchar *)"abc");
 
-    res = judy_lookup(&judy, (uchar *)"abc");
+//     res = judy_lookup(&judy, (uchar *)"abc");
 
-    assert(res == NULL);
+//     assert(res == NULL);
 
-    return 0;
-}
+//     return 0;
+// }
