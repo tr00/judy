@@ -35,7 +35,7 @@ static bool _tiny_lookup(JP *node, uchar cc)
 #elif __ARM_NEON
 
     uint8x8_t vec = vcreate_u8(*(uint64_t *)&tiny->keys);
-    uint8x8_t msk = vcreate_u8(0x00fffefdfcfbfa08ull);
+    int8x8_t msk = vcreate_s8(0x00fffefdfcfbfa08ull);
 
     uint8x8_t tmp = vdup_n_u8(0x80);
     uint8x8_t key = vdup_n_u8(cc);
@@ -74,7 +74,7 @@ static bool _tiny_insert(JP **nodeptr, uchar cc)
 #elif __ARM_NEON
 
     uint8x8_t vec = vcreate_u8(*(uint64_t *)&tiny->keys);
-    uint8x8_t msk = vcreate_u8(0x00fffefdfcfbfa08ull);
+    int8x8_t msk = vcreate_s8(0x00fffefdfcfbfa08ull);
 
     uint8x8_t tmp = vdup_n_u8(0x80);
     uint8x8_t key = vdup_n_u8(cc);
@@ -94,8 +94,6 @@ static bool _tiny_insert(JP **nodeptr, uchar cc)
         return true;
     }
 
-    // TODO: key not found...
-
     if (tiny->mask != 0xfe)
     {
         uint64_t idx = __builtin_clz(~((uint32_t)tiny->mask << 24));
@@ -107,9 +105,21 @@ static bool _tiny_insert(JP **nodeptr, uchar cc)
     }
     else
     {
-        // node is full
-    }
+        struct TRIE *trie = claim(sizeof(struct TRIE));
 
+        trie->nodes[tiny->nodes[0]] = tiny->nodes[0];
+        trie->nodes[tiny->nodes[1]] = tiny->nodes[1];
+        trie->nodes[tiny->nodes[2]] = tiny->nodes[2];
+        trie->nodes[tiny->nodes[3]] = tiny->nodes[3];
+        trie->nodes[tiny->nodes[4]] = tiny->nodes[4];
+        trie->nodes[tiny->nodes[5]] = tiny->nodes[5];
+        trie->nodes[tiny->nodes[6]] = tiny->nodes[6];
+
+        **nodeptr = encode(trie, TRIE);
+        *nodeptr = &trie->nodes[cc];
+
+        stash(tiny, sizeof(*tiny));
+    }
 
     return false;
 }

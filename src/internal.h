@@ -32,6 +32,14 @@ static inline __attribute__((always_inline)) JP encode(void *node, uintptr_t tag
     return (JP)(ptr | tag);
 }
 
+enum
+{
+    LEAF,
+    TINY,
+    TRIE,
+};
+
+
 /**
  * Node Interface:
  * 
@@ -42,5 +50,8 @@ static inline __attribute__((always_inline)) JP encode(void *node, uintptr_t tag
  */
 
 
+void *claim(size_t size);
+
+void stash(void *ptr, size_t size);
 
 #endif

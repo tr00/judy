@@ -10,6 +10,9 @@ typedef struct JUDY
     uintptr_t root;
 } judy_t;
 
+void judy_create(judy_t *judy);
+void judy_delete(judy_t *judy);
+
 /**
  * finds the value associated with the '\0'-terminated string key.
  * returns NULL if it can't be found.

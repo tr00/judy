@@ -1,42 +1,14 @@
 #include "judy.h"
 #include "internal.h"
 
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
-#include "nodes/leaf.h"
-#include "nodes/tiny.h"
 #include "nodes/trie.h"
+#include "nodes/tiny.h"
+#include "nodes/leaf.h"
 
-enum
-{
-    LEAF,
-    TINY,
-    TRIE,
-};
-
-/**
- * This node stores all subexpanses in a single buffer.
- * Each subexpanse is indexed by the current char.
- *
- * A lookup takes requires only 1 cache line fill but
- * the memory footprint of this node is very large
- * for small population sizes.
- */
-typedef struct JUDY_TRIE_NODE
-{
-    JP nodes[256];
-} judy_trie_t;
-
-/**
- *
- */
-typedef struct JUDY_TINY_NODE
-{
-    uchar keys[7];
-    uint8_t mask;
-    JP nodes[7];
-} judy_tiny_t;
 
 void *judy_lookup(judy_t *judy, const uchar *key)
 {
@@ -65,13 +37,11 @@ void *judy_lookup(judy_t *judy, const uchar *key)
         if (res == false)
             return NULL;
 
-
         // If cc == '\0' we can assume that we deal with a leave node
         // because no string key continues after '\0'.
         // The associated value can be retrieved instead of a subexpanse
         if (!cc)
             return (void *)decode(node);
-
 
         ++key;
     }
@@ -83,8 +53,8 @@ void judy_insert(judy_t *judy, const uchar *key, void *val)
 {
     JP *nodeptr = &judy->root;
 
-// traverse the judy array by decoding char by char until
-// a node is reached which no longer contains the remaining key
+    // traverse the judy array by decoding char by char until
+    // a node is reached which no longer contains the remaining key
     while (1)
     {
         uchar cc = *key;
@@ -121,9 +91,15 @@ EXPAND:
     {
         uchar cc = *key;
 
-        judy_trie_t *trie = (judy_trie_t *)calloc(1, sizeof(judy_trie_t));
-        *nodeptr = encode(trie, TRIE);
-        nodeptr = &trie->nodes[cc];
+        // // old:
+        // struct TRIE *trie = claim(sizeof(struct TRIE));
+        // *nodeptr = encode(trie, TRIE);
+        // nodeptr = &trie->nodes[cc];
+
+        // new:
+        struct TINY *tiny = claim(sizeof(struct TINY));
+        *nodeptr = encode(tiny, TINY);
+        _tiny_insert(&nodeptr, cc);
 
         if (!cc)
             break;
@@ -133,7 +109,46 @@ EXPAND:
 
 // we can assume that `key` is pointing to '\0' so
 // all that is left to be done is write the value to a leaf node.
-INSERT:
-
     *nodeptr = encode(val, LEAF);
+}
+
+void judy_create(judy_t *judy)
+{
+    judy->root = (JP)0;
+}
+
+void judy_delete(judy_t *judy)
+{
+}
+
+// internal allocator
+
+enum
+{
+    N2048,
+    N64,
+};
+
+int numallocs[2] = {};
+
+void *claim(size_t size)
+{
+    switch (size)
+    {
+    case 64:
+        ++numallocs[N64];
+        break;
+    case 2048:
+        ++numallocs[N2048];
+        break;
+    default:
+        assert(0);
+    }
+
+    return calloc(1, size);
+}
+
+void stash(void *ptr, size_t size)
+{
+    free(ptr);
 }

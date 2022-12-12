@@ -5,7 +5,9 @@
 
 int main()
 {
-    judy_t judy = {};
+    judy_t judy;
+
+    judy_create(&judy);
 
     judy_insert(&judy, (uchar *)"abc", &judy);
 
@@ -14,6 +16,8 @@ int main()
     res = judy_lookup(&judy, (uchar *)"abc");
 
     assert(res == &judy);
+
+    judy_delete(&judy);
 
     return 0;
 }

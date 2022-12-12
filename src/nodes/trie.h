@@ -1,6 +1,14 @@
 #ifndef __TRIE_H_
 #define __TRIE_H_
 
+/**
+ * This node stores all subexpanses in a single buffer.
+ * Each subexpanse is indexed by the current char.
+ *
+ * A lookup takes requires only 1 cache line fill but
+ * the memory footprint of this node is very large
+ * for small population sizes.
+ */
 struct TRIE
 {
     JP nodes[256];
